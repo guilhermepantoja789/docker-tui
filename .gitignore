@@ -1,0 +1,14 @@
+# Binaries
+/docker-tui
+/bin/
+*.exe
+*.test
+*.out
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Go
+vendor/
