@@ -65,17 +65,6 @@ docker-tui --check-update=false   # or DOCKER_TUI_NO_UPDATE=1
 
 On startup (release builds only), the TUI checks GitHub for a newer version and shows a status-line warning with update instructions. Network failures are ignored.
 
-## Releasing (maintainers)
-
-Binaries are published by GoReleaser when a version tag is pushed:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-That creates a GitHub Release with linux/darwin × amd64/arm64 binaries and `checksums.txt`.
-
 ## Keys
 
 | Key | Action |
