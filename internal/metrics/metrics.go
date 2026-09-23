@@ -5,7 +5,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 
-	"github.com/guilhermepantoja/docker-tui/internal/model"
+	"github.com/guilhermepantoja789/docker-tui/internal/model"
 )
 
 // Sample is a raw stats observation used to compute deltas.

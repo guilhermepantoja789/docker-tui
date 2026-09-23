@@ -19,7 +19,7 @@ import (
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 
-	"github.com/guilhermepantoja/docker-tui/internal/model"
+	"github.com/guilhermepantoja789/docker-tui/internal/model"
 )
 
 // Client wraps the Docker Engine API with helpers suited for telemetry.
