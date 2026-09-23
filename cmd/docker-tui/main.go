@@ -9,10 +9,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/guilhermepantoja/docker-tui/internal/collector"
-	"github.com/guilhermepantoja/docker-tui/internal/config"
-	"github.com/guilhermepantoja/docker-tui/internal/dockerx"
-	"github.com/guilhermepantoja/docker-tui/internal/ui"
+	"github.com/guilhermepantoja789/docker-tui/internal/collector"
+	"github.com/guilhermepantoja789/docker-tui/internal/config"
+	"github.com/guilhermepantoja789/docker-tui/internal/dockerx"
+	"github.com/guilhermepantoja789/docker-tui/internal/ui"
 )
 
 func main() {

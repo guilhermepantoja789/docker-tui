@@ -11,11 +11,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/guilhermepantoja/docker-tui/internal/collector"
-	"github.com/guilhermepantoja/docker-tui/internal/config"
-	"github.com/guilhermepantoja/docker-tui/internal/dockerx"
-	"github.com/guilhermepantoja/docker-tui/internal/model"
-	"github.com/guilhermepantoja/docker-tui/internal/ui/styles"
+	"github.com/guilhermepantoja789/docker-tui/internal/collector"
+	"github.com/guilhermepantoja789/docker-tui/internal/config"
+	"github.com/guilhermepantoja789/docker-tui/internal/dockerx"
+	"github.com/guilhermepantoja789/docker-tui/internal/model"
+	"github.com/guilhermepantoja789/docker-tui/internal/session"
+	"github.com/guilhermepantoja789/docker-tui/internal/ui/styles"
 )
 
 type tabKind int
@@ -71,6 +72,9 @@ type Model struct {
 
 	confirm confirmState
 	hosts   hostPickerState
+	inspect inspectState
+	logs    *session.LogHub
+	logView logViewState
 
 	snap *model.Snapshot
 
@@ -87,6 +91,8 @@ func New(cfg config.Config, handle *collector.Handle, onHost func(dockerx.Option
 	ti.CharLimit = 64
 	ti.Width = 30
 
+	hub := session.NewLogHub(handle.Client(), cfg.LogTail, cfg.LogBuffer)
+
 	return Model{
 		cfg:         cfg,
 		handle:      handle,
@@ -94,11 +100,12 @@ func New(cfg config.Config, handle *collector.Handle, onHost func(dockerx.Option
 		filterInput: ti,
 		snap:        handle.Snapshot(),
 		sort:        sortByName,
+		logs:        hub,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.scheduleTick(), m.waitAction())
+	return tea.Batch(m.scheduleTick(), m.waitAction(), m.waitLogs())
 }
 
 func (m Model) scheduleTick() tea.Cmd {
@@ -122,12 +129,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.inspect.active {
+			w, h := m.inspectViewportSize()
+			m.inspect.vp.Width = w
+			m.inspect.vp.Height = h
+		}
+		if m.logs != nil && m.logs.Active() {
+			m.ensureLogViewports()
+			m.syncLogViewports()
+		}
 		m.updateViewport()
 		return m, nil
 
 	case tickMsg:
 		m.snap = m.handle.Snapshot()
 		m.updateViewport()
+		if m.logs != nil && m.logs.Active() {
+			m.syncLogViewports()
+		}
 		if m.snap != nil && m.snap.Err != nil {
 			m.statusErr = m.snap.Err
 		}
@@ -144,6 +163,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.waitAction()
 
+	case inspectMsg:
+		m.applyInspectMsg(msg)
+		return m, nil
+
+	case logUpdateMsg:
+		m.syncLogViewports()
+		return m, m.waitLogs()
+
+	case execDoneMsg:
+		if msg.err != nil {
+			m.statusErr = msg.err
+			m.statusMsg = ""
+		} else {
+			m.statusErr = nil
+			m.statusMsg = msg.op + " done"
+		}
+		m.snap = m.handle.Snapshot()
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -157,6 +195,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.hosts.active {
 		return m.handleHostKey(msg)
 	}
+	if m.inspect.active {
+		return m.handleInspectKey(msg)
+	}
+	if m.logs != nil && m.logs.Active() && m.logView.logFocus {
+		return m.handleLogsKey(msg)
+	}
 	if m.filtering {
 		return m.handleFilterKey(msg)
 	}
@@ -164,8 +208,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
 		m.quitting = true
+		if m.logs != nil {
+			m.logs.CloseAll()
+		}
 		return m, tea.Quit
 	case "tab", "right", "l":
+		if m.logs != nil && m.logs.Active() && msg.String() == "tab" {
+			m.logView.logFocus = true
+			m.statusMsg = "log focus"
+			return m, nil
+		}
 		m.tab = (m.tab + 1) % 4
 		m.cursor = 0
 		m.offset = 0
@@ -210,6 +262,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterInput.Focus()
 		return m, textinput.Blink
 	case "esc":
+		if m.logs != nil && m.logs.Active() {
+			m.logView.logFocus = true
+			return m, nil
+		}
 		m.filter = ""
 		m.filterInput.SetValue("")
 		m.cursor, m.offset = 0, 0
@@ -232,7 +288,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d", "x":
 		return m.promptDestructive()
 	case "enter":
-		m.showDetail()
+		return m.openInspect()
+	case "o":
+		return m.openLogs()
+	case "e":
+		return m.startExec()
+	case "A":
+		return m.startAttach()
 	}
 	return m, nil
 }
@@ -267,9 +329,17 @@ func (m Model) handleHostKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			ctx := m.hosts.contexts[m.hosts.cursor]
 			m.hosts.active = false
 			if m.onHost != nil {
+				if m.logs != nil {
+					m.logs.CloseAll()
+					m.logView.logFocus = false
+				}
+				m.inspect = inspectState{}
 				if err := m.onHost(dockerx.Options{Context: ctx.Name}); err != nil {
 					m.statusErr = err
 				} else {
+					if m.logs != nil {
+						m.logs.SetStreamer(m.handle.Client())
+					}
 					m.statusMsg = "switched to context " + ctx.Name
 					m.statusErr = nil
 					m.cursor, m.offset = 0, 0
@@ -358,14 +428,6 @@ func (m Model) promptDestructive() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) showDetail() {
-	id, name, ok := m.selectedID()
-	if !ok {
-		return
-	}
-	m.statusMsg = fmt.Sprintf("%s (%s)", name, truncate(id, 12))
-}
-
 func (m Model) selectedID() (id, name string, ok bool) {
 	switch m.tab {
 	case tabContainers:
@@ -431,10 +493,10 @@ func (m *Model) ensureCursorVisible() {
 }
 
 func (m Model) visibleRows() int {
-	// header(1)+tabs(1)+status(1)+table header(1)+footer(2)+padding
-	h := m.height - 8
-	if h < 3 {
-		h = 3
+	// listBodyHeight accounts for log pane split; subtract table header line.
+	h := m.listBodyHeight() - 1
+	if h < 1 {
+		return 1
 	}
 	return h
 }
@@ -628,13 +690,23 @@ func (m Model) View() string {
 	} else if m.confirm.active {
 		b.WriteString(styles.Modal.Render(m.confirm.message))
 		b.WriteString("\n")
+	} else if m.inspect.active {
+		b.WriteString(m.renderInspect())
 	} else if m.filtering {
 		b.WriteString("Filter: ")
 		b.WriteString(m.filterInput.View())
 		b.WriteString("\n")
 		b.WriteString(m.renderTable())
+		if m.logs != nil && m.logs.Active() {
+			b.WriteString("\n")
+			b.WriteString(m.renderLogs())
+		}
 	} else {
 		b.WriteString(m.renderTable())
+		if m.logs != nil && m.logs.Active() {
+			b.WriteString("\n")
+			b.WriteString(m.renderLogs())
+		}
 	}
 
 	b.WriteString("\n")
@@ -883,7 +955,14 @@ func (m Model) renderStatus() string {
 }
 
 func (m Model) renderFooter() string {
-	help := "tab/1-4 views  j/k move  / filter  s sort  a start  t stop  r restart  d delete  H host  q quit"
+	help := "enter inspect  o logs  e exec  A attach  tab/1-4  j/k  / filter  s sort  a/t/r lifecycle  d delete  H host  q quit"
+	if m.inspect.active {
+		help = "j/k scroll  J json  o logs  esc close"
+	} else if m.logs != nil && m.logs.Active() && m.logView.logFocus {
+		help = "j/k scroll  h/l pane  f follow  tab list  esc close pane  q quit"
+	} else if m.logs != nil && m.logs.Active() {
+		help = "o add log pane  tab log focus  enter inspect  e exec  esc → logs"
+	}
 	return styles.Help.Render(truncate(help, max(0, m.width)))
 }
 

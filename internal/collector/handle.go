@@ -6,9 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/guilhermepantoja/docker-tui/internal/config"
-	"github.com/guilhermepantoja/docker-tui/internal/dockerx"
-	"github.com/guilhermepantoja/docker-tui/internal/model"
+	"github.com/guilhermepantoja789/docker-tui/internal/config"
+	"github.com/guilhermepantoja789/docker-tui/internal/dockerx"
+	"github.com/guilhermepantoja789/docker-tui/internal/model"
 )
 
 // Handle allows hot-swapping the active Engine when the Docker host changes.

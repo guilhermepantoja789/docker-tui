@@ -12,10 +12,10 @@ import (
 	"github.com/docker/docker/api/types/events"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/guilhermepantoja/docker-tui/internal/config"
-	"github.com/guilhermepantoja/docker-tui/internal/dockerx"
-	"github.com/guilhermepantoja/docker-tui/internal/metrics"
-	"github.com/guilhermepantoja/docker-tui/internal/model"
+	"github.com/guilhermepantoja789/docker-tui/internal/config"
+	"github.com/guilhermepantoja789/docker-tui/internal/dockerx"
+	"github.com/guilhermepantoja789/docker-tui/internal/metrics"
+	"github.com/guilhermepantoja789/docker-tui/internal/model"
 )
 
 // Engine drives inventory, viewport-priority stats, and lifecycle actions.

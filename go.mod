@@ -1,6 +1,6 @@
-module github.com/guilhermepantoja/docker-tui
+module github.com/guilhermepantoja789/docker-tui
 
-go 1.27.0
+go 1.26.0
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0

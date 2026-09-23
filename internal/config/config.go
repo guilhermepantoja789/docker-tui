@@ -10,14 +10,16 @@ import (
 
 // Config holds runtime settings for the TUI and metrics collector.
 type Config struct {
-	Context          string
-	Host             string
-	StatsConcurrency int
-	StatsInterval    time.Duration
+	Context           string
+	Host              string
+	StatsConcurrency  int
+	StatsInterval     time.Duration
 	ReconcileInterval time.Duration
 	UIRefreshInterval time.Duration
-	StatsTimeout     time.Duration
-	ViewportBuffer   int
+	StatsTimeout      time.Duration
+	ViewportBuffer    int
+	LogTail           string
+	LogBuffer         int
 }
 
 // Parse reads flags from args (typically os.Args[1:]).
@@ -34,6 +36,8 @@ func Parse(args []string) (Config, error) {
 	fs.DurationVar(&cfg.UIRefreshInterval, "ui-fps", 200*time.Millisecond, "UI refresh interval (approx; 200ms ≈ 5 Hz)")
 	fs.DurationVar(&cfg.StatsTimeout, "stats-timeout", 5*time.Second, "per-container stats request timeout")
 	fs.IntVar(&cfg.ViewportBuffer, "viewport-buffer", 5, "extra rows above/below viewport to sample eagerly")
+	fs.StringVar(&cfg.LogTail, "log-tail", "200", "initial lines to fetch when opening container logs")
+	fs.IntVar(&cfg.LogBuffer, "log-buffer", 5000, "max retained log lines per pane")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -60,6 +64,12 @@ func (c Config) Validate() error {
 	}
 	if c.ViewportBuffer < 0 {
 		return fmt.Errorf("viewport-buffer must be >= 0")
+	}
+	if c.LogTail == "" {
+		return fmt.Errorf("log-tail must not be empty")
+	}
+	if c.LogBuffer < 100 {
+		return fmt.Errorf("log-buffer must be >= 100")
 	}
 	return nil
 }
