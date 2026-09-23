@@ -17,6 +17,8 @@ import (
 	"github.com/guilhermepantoja789/docker-tui/internal/model"
 	"github.com/guilhermepantoja789/docker-tui/internal/session"
 	"github.com/guilhermepantoja789/docker-tui/internal/ui/styles"
+	"github.com/guilhermepantoja789/docker-tui/internal/updatecheck"
+	"github.com/guilhermepantoja789/docker-tui/internal/version"
 )
 
 type tabKind int
@@ -70,6 +72,8 @@ type Model struct {
 	statusMsg string
 	statusErr error
 
+	updateNotice string
+
 	confirm confirmState
 	hosts   hostPickerState
 	inspect inspectState
@@ -83,6 +87,7 @@ type Model struct {
 
 type tickMsg time.Time
 type actionResultMsg model.ActionResult
+type updateAvailableMsg string
 
 // New creates the UI model. handle must already be connected.
 func New(cfg config.Config, handle *collector.Handle, onHost func(dockerx.Options) error) Model {
@@ -105,7 +110,23 @@ func New(cfg config.Config, handle *collector.Handle, onHost func(dockerx.Option
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.scheduleTick(), m.waitAction(), m.waitLogs())
+	return tea.Batch(m.scheduleTick(), m.waitAction(), m.waitLogs(), m.checkUpdate())
+}
+
+func (m Model) checkUpdate() tea.Cmd {
+	if !m.cfg.CheckUpdate {
+		return nil
+	}
+	current := version.Version
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		res := updatecheck.Check(ctx, current, nil)
+		if res == nil {
+			return nil
+		}
+		return updateAvailableMsg(res.Message)
+	}
 }
 
 func (m Model) scheduleTick() tea.Cmd {
@@ -180,6 +201,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = msg.op + " done"
 		}
 		m.snap = m.handle.Snapshot()
+		return m, nil
+
+	case updateAvailableMsg:
+		m.updateNotice = string(msg)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -947,6 +972,9 @@ func (m Model) renderStatus() string {
 	}
 	if m.statusMsg != "" {
 		return styles.StatusOK.Render(m.statusMsg)
+	}
+	if m.updateNotice != "" {
+		return styles.StatusWarn.Render(truncate(m.updateNotice, max(0, m.width)))
 	}
 	if m.filter != "" {
 		return styles.Muted.Render("filter: " + m.filter)

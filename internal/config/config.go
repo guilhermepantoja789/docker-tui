@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,8 @@ type Config struct {
 	ViewportBuffer    int
 	LogTail           string
 	LogBuffer         int
+	ShowVersion       bool
+	CheckUpdate       bool
 }
 
 // Parse reads flags from args (typically os.Args[1:]).
@@ -28,6 +31,13 @@ func Parse(args []string) (Config, error) {
 	fs.SetOutput(os.Stderr)
 
 	var cfg Config
+	checkUpdate := true
+	if v := os.Getenv("DOCKER_TUI_NO_UPDATE"); v == "1" || strings.EqualFold(v, "true") {
+		checkUpdate = false
+	}
+
+	fs.BoolVar(&cfg.ShowVersion, "version", false, "print version and exit")
+	fs.BoolVar(&checkUpdate, "check-update", checkUpdate, "check GitHub for a newer release on startup")
 	fs.StringVar(&cfg.Context, "context", "", "Docker context name (overrides DOCKER_HOST when set)")
 	fs.StringVar(&cfg.Host, "host", "", "Docker daemon host URL (e.g. unix:///var/run/docker.sock, tcp://host:2375)")
 	fs.IntVar(&cfg.StatsConcurrency, "stats-concurrency", 16, "max concurrent one-shot stats requests")
@@ -44,6 +54,10 @@ func Parse(args []string) (Config, error) {
 			return Config{}, err
 		}
 		return Config{}, err
+	}
+	cfg.CheckUpdate = checkUpdate
+	if cfg.ShowVersion {
+		return cfg, nil
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err

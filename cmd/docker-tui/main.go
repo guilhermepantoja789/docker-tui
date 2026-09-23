@@ -13,6 +13,7 @@ import (
 	"github.com/guilhermepantoja789/docker-tui/internal/config"
 	"github.com/guilhermepantoja789/docker-tui/internal/dockerx"
 	"github.com/guilhermepantoja789/docker-tui/internal/ui"
+	"github.com/guilhermepantoja789/docker-tui/internal/version"
 )
 
 func main() {
@@ -27,6 +28,10 @@ func run() int {
 		}
 		fmt.Fprintf(os.Stderr, "docker-tui: %v\n", err)
 		return 2
+	}
+	if cfg.ShowVersion {
+		fmt.Println(version.String())
+		return 0
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

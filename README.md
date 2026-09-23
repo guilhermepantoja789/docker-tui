@@ -15,11 +15,32 @@ Terminal UI for Docker telemetry and lifecycle management. Optimized for large f
 
 ## Requirements
 
-- Go 1.26+
 - Access to a Docker Engine API (local socket or remote)
 - `docker` CLI on `PATH` for exec / attach
+- Go 1.26+ only if building from source
 
-## Install / Run
+## Install
+
+### One-liner (Linux / macOS)
+
+Install or update the latest release binary:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/guilhermepantoja789/docker-tui/main/scripts/install.sh | bash
+```
+
+Optional:
+
+```bash
+VERSION=v0.1.0 bash <(curl -fsSL https://raw.githubusercontent.com/guilhermepantoja789/docker-tui/main/scripts/install.sh)
+BINDIR="$HOME/.local/bin" bash <(curl -fsSL https://raw.githubusercontent.com/guilhermepantoja789/docker-tui/main/scripts/install.sh)
+```
+
+### GitHub Releases
+
+Download the archive for your OS/arch from [Releases](https://github.com/guilhermepantoja789/docker-tui/releases), verify against `checksums.txt`, and place `docker-tui` on your `PATH`.
+
+### From source
 
 ```bash
 go install github.com/guilhermepantoja789/docker-tui/cmd/docker-tui@latest
@@ -27,15 +48,33 @@ go install github.com/guilhermepantoja789/docker-tui/cmd/docker-tui@latest
 
 ```bash
 go run ./cmd/docker-tui
+go build -o docker-tui ./cmd/docker-tui
 ```
 
+## Run
+
 ```bash
-go build -o docker-tui ./cmd/docker-tui
-./docker-tui --context my-remote
-./docker-tui --host tcp://192.168.1.10:2375
-./docker-tui --stats-concurrency 32 --stats-interval 2s
-./docker-tui --log-tail 200 --log-buffer 5000
+docker-tui
+docker-tui --version
+docker-tui --context my-remote
+docker-tui --host tcp://192.168.1.10:2375
+docker-tui --stats-concurrency 32 --stats-interval 2s
+docker-tui --log-tail 200 --log-buffer 5000
+docker-tui --check-update=false   # or DOCKER_TUI_NO_UPDATE=1
 ```
+
+On startup (release builds only), the TUI checks GitHub for a newer version and shows a status-line warning with update instructions. Network failures are ignored.
+
+## Releasing (maintainers)
+
+Binaries are published by GoReleaser when a version tag is pushed:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+That creates a GitHub Release with linux/darwin × amd64/arm64 binaries and `checksums.txt`.
 
 ## Keys
 
