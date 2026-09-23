@@ -8,7 +8,7 @@ Terminal UI for Docker telemetry and lifecycle management. Optimized for large f
 - Networks, volumes, and images views
 - Container lifecycle: start, stop, restart, remove
 - Inspect detail (curated view + raw JSON)
-- Side-by-side live logs (up to 2 follow streams)
+- Side-by-side live logs (up to 4 follow streams)
 - Exec / attach via the Docker CLI (TTY handoff)
 - Local and remote Docker hosts via contexts / `DOCKER_HOST`
 - Scales to thousands of containers by sampling visible rows first
