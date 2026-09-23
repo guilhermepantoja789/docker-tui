@@ -959,7 +959,11 @@ func (m Model) renderFooter() string {
 	if m.inspect.active {
 		help = "j/k scroll  J json  o logs  esc close"
 	} else if m.logs != nil && m.logs.Active() && m.logView.logFocus {
-		help = "j/k scroll  h/l pane  f follow  tab list  esc close pane  q quit"
+		if m.logView.filtering {
+			help = "type regex  enter apply  esc clear  q quit"
+		} else {
+			help = "j/k scroll  h/l pane  / filter  c case  i invert  E/W presets  f follow  tab list  esc close  q quit"
+		}
 	} else if m.logs != nil && m.logs.Active() {
 		help = "o add log pane  tab log focus  enter inspect  e exec  esc → logs"
 	}

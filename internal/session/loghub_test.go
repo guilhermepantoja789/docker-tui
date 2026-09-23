@@ -86,7 +86,7 @@ func TestLogHub_OpenFocusesExisting(t *testing.T) {
 	}
 }
 
-func TestLogHub_ThirdOpenReplacesFocused(t *testing.T) {
+func TestLogHub_FifthOpenReplacesFocused(t *testing.T) {
 	mk := func(msg string) func() io.ReadCloser {
 		return func() io.ReadCloser {
 			return io.NopCloser(bytes.NewReader(multiplexFrame(1, msg+"\n")))
@@ -96,37 +96,39 @@ func TestLogHub_ThirdOpenReplacesFocused(t *testing.T) {
 		"a": mk("from-a"),
 		"b": mk("from-b"),
 		"c": mk("from-c"),
+		"d": mk("from-d"),
+		"e": mk("from-e"),
 	}}
 	hub := session.NewLogHub(f, "10", 100)
 	ctx := context.Background()
 
-	if err := hub.Open(ctx, "a", "A"); err != nil {
+	ids := []string{"a", "b", "c", "d"}
+	names := []string{"A", "B", "C", "D"}
+	for i := range ids {
+		if err := hub.Open(ctx, ids[i], names[i]); err != nil {
+			t.Fatal(err)
+		}
+		waitLines(t, hub, i, 1)
+	}
+	if hub.Count() != 4 {
+		t.Fatalf("count=%d, want 4", hub.Count())
+	}
+	// Focus is on D (slot 3). Opening E should replace focused.
+	hub.SetFocus(3)
+	if err := hub.Open(ctx, "e", "E"); err != nil {
 		t.Fatal(err)
 	}
-	waitLines(t, hub, 0, 1)
-	if err := hub.Open(ctx, "b", "B"); err != nil {
-		t.Fatal(err)
-	}
-	waitLines(t, hub, 1, 1)
-	if hub.Count() != 2 {
-		t.Fatalf("count=%d, want 2", hub.Count())
-	}
-	// Focus is on B (slot 1). Opening C should replace focused.
-	hub.SetFocus(1)
-	if err := hub.Open(ctx, "c", "C"); err != nil {
-		t.Fatal(err)
-	}
-	waitLines(t, hub, 1, 1)
+	waitLines(t, hub, 3, 1)
 
 	snap := hub.Snapshot()
-	if hub.Count() != 2 {
-		t.Fatalf("count=%d, want 2 after replace", hub.Count())
+	if hub.Count() != 4 {
+		t.Fatalf("count=%d, want 4 after replace", hub.Count())
 	}
-	if snap.Panes[0].ContainerID != "a" {
-		t.Fatalf("pane0=%s, want a", snap.Panes[0].ContainerID)
-	}
-	if snap.Panes[1].ContainerID != "c" {
-		t.Fatalf("pane1=%s, want c (replaced focused)", snap.Panes[1].ContainerID)
+	want := []string{"a", "b", "c", "e"}
+	for i, id := range want {
+		if snap.Panes[i].ContainerID != id {
+			t.Fatalf("pane%d=%s, want %s", i, snap.Panes[i].ContainerID, id)
+		}
 	}
 }
 
@@ -200,17 +202,62 @@ func TestLogHub_CycleFocus(t *testing.T) {
 			return io.NopCloser(bytes.NewReader(multiplexFrame(1, msg+"\n")))
 		}
 	}
-	f := &fakeStreamer{bodies: map[string]func() io.ReadCloser{"a": mk("a"), "b": mk("b")}}
+	f := &fakeStreamer{bodies: map[string]func() io.ReadCloser{
+		"a": mk("a"), "b": mk("b"), "c": mk("c"), "d": mk("d"),
+	}}
+	hub := session.NewLogHub(f, "10", 100)
+	ctx := context.Background()
+	for i, id := range []string{"a", "b", "c", "d"} {
+		_ = hub.Open(ctx, id, strings.ToUpper(id))
+		waitLines(t, hub, i, 1)
+	}
+	hub.SetFocus(0)
+	hub.CycleFocus()
+	if hub.Focus() != 1 {
+		t.Fatalf("focus=%d, want 1", hub.Focus())
+	}
+	hub.CycleFocus()
+	if hub.Focus() != 2 {
+		t.Fatalf("focus=%d, want 2", hub.Focus())
+	}
+	hub.CycleFocus()
+	if hub.Focus() != 3 {
+		t.Fatalf("focus=%d, want 3", hub.Focus())
+	}
+	hub.CycleFocus()
+	if hub.Focus() != 0 {
+		t.Fatalf("focus=%d, want 0 (wrap)", hub.Focus())
+	}
+}
+
+func TestLogHub_CycleFocusSparse(t *testing.T) {
+	mk := func(msg string) func() io.ReadCloser {
+		return func() io.ReadCloser {
+			return io.NopCloser(bytes.NewReader(multiplexFrame(1, msg+"\n")))
+		}
+	}
+	f := &fakeStreamer{bodies: map[string]func() io.ReadCloser{
+		"a": mk("a"), "b": mk("b"), "c": mk("c"),
+	}}
 	hub := session.NewLogHub(f, "10", 100)
 	ctx := context.Background()
 	_ = hub.Open(ctx, "a", "A")
 	waitLines(t, hub, 0, 1)
 	_ = hub.Open(ctx, "b", "B")
 	waitLines(t, hub, 1, 1)
+	_ = hub.Open(ctx, "c", "C")
+	waitLines(t, hub, 2, 1)
+
+	hub.SetFocus(1)
+	hub.CloseFocused() // close middle slot
+	if hub.Count() != 2 {
+		t.Fatalf("count=%d, want 2", hub.Count())
+	}
+	// Remaining active: 0 and 2. Focus should land on an active pane.
 	hub.SetFocus(0)
 	hub.CycleFocus()
-	if hub.Focus() != 1 {
-		t.Fatalf("focus=%d, want 1", hub.Focus())
+	if hub.Focus() != 2 {
+		t.Fatalf("focus=%d, want 2", hub.Focus())
 	}
 	hub.CycleFocus()
 	if hub.Focus() != 0 {

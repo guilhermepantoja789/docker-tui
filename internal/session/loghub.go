@@ -11,7 +11,7 @@ import (
 	"github.com/guilhermepantoja789/docker-tui/internal/dockerx"
 )
 
-const MaxPanes = 2
+const MaxPanes = 4
 
 // LogStreamer opens container log streams. *dockerx.Client implements this.
 type LogStreamer interface {
@@ -28,7 +28,7 @@ type PaneSnapshot struct {
 	Active        bool
 }
 
-// HubSnapshot is an immutable view of both panes plus focus.
+// HubSnapshot is an immutable view of all panes plus focus.
 type HubSnapshot struct {
 	Panes [MaxPanes]PaneSnapshot
 	Focus int
@@ -117,7 +117,7 @@ func (h *LogHub) Snapshot() HubSnapshot {
 	return out
 }
 
-// Focus returns the focused pane index (0 or 1).
+// Focus returns the focused pane index.
 func (h *LogHub) Focus() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -134,17 +134,31 @@ func (h *LogHub) SetFocus(i int) {
 	h.focus = i
 }
 
-// CycleFocus moves focus to the other active pane when both are open.
+// CycleFocus moves focus to the next active pane (wraps around).
 func (h *LogHub) CycleFocus() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.panes[0] != nil && h.panes[1] != nil {
-		h.focus = 1 - h.focus
+	var active []int
+	for i, s := range h.panes {
+		if s != nil {
+			active = append(active, i)
+		}
 	}
+	if len(active) < 2 {
+		return
+	}
+	cur := 0
+	for i, idx := range active {
+		if idx == h.focus {
+			cur = i
+			break
+		}
+	}
+	h.focus = active[(cur+1)%len(active)]
 }
 
 // Open starts or focuses a log stream for container id.
-// A third open replaces the focused pane.
+// When all slots are full, Open replaces the focused pane.
 func (h *LogHub) Open(parent context.Context, id, name string) error {
 	h.mu.Lock()
 	streamer := h.streamer
@@ -240,7 +254,12 @@ func (h *LogHub) ToggleFollow() {
 func (h *LogHub) Active() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.panes[0] != nil || h.panes[1] != nil
+	for _, s := range h.panes {
+		if s != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Count returns the number of open panes.
